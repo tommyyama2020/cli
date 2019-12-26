@@ -140,28 +140,16 @@ func handleFlagErrorAndCommandHelp(flagErr *flags.Error, parser *flags.Parser, e
 			config, configErr := configv3.LoadConfig()
 			if configErr != nil {
 				if _, ok := configErr.(translatableerror.EmptyConfigError); !ok {
-
 					fmt.Fprintf(os.Stderr, "Empty Config, failed to load plugins")
 					return 1
 				}
 			}
 
 			if plugin, ok := isPluginCommand(originalArgs[0], config.Plugins()); ok {
-				_, commandUI, err := getCFConfigAndCommandUIObjects()
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "%s\n", err.Error())
-					return 1
-				}
-				defer commandUI.FlushDeferred()
-				pluginErr := plugin_transition.RunPlugin(plugin, commandUI)
-				if pluginErr != nil {
-					handleError(pluginErr, commandUI) //nolint: errcheck
-					return 1
-				}
+				runPlugin(plugin)
 			} else {
 				// TODO Extract handling of unknown commands/suggested  commands out of legacy
 				cmd.Main(os.Getenv("CF_TRACE"), os.Args)
-
 			}
 		} else {
 			helpExitCode := parse([]string{"help", originalArgs[0]}, commandList)
@@ -175,6 +163,21 @@ func handleFlagErrorAndCommandHelp(flagErr *flags.Error, parser *flags.Parser, e
 		}
 	default:
 		fmt.Fprintf(os.Stderr, "Unexpected flag error\ntype: %s\nmessage: %s\n", flagErr.Type, flagErr.Error())
+	}
+	return 0
+}
+
+func runPlugin(plugin configv3.Plugin) int {
+	_, commandUI, err := getCFConfigAndCommandUIObjects()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
+		return 1
+	}
+	defer commandUI.FlushDeferred()
+	pluginErr := plugin_transition.RunPlugin(plugin, commandUI)
+	if pluginErr != nil {
+		handleError(pluginErr, commandUI) //nolint: errcheck
+		return 1
 	}
 	return 0
 }
