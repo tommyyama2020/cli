@@ -1,6 +1,6 @@
 // +build !V7
 
-package main
+package parser
 
 func preventExtraArgs(args []string) error {
 	return nil

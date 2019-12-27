@@ -1,6 +1,6 @@
 // +build V7
 
-package main
+package parser 
 
 import (
 	"strings"
