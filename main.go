@@ -11,7 +11,8 @@ import (
 
 func main() {
 	defer panichandler.HandlePanic()
-	exitStatus := command_parser.CommandParser(os.Args)
+	//TODO try to run plugin here
+	exitStatus := command_parser.ParseCommandFromArgs(os.Args)
 	if exitStatus != 0 {
 		os.Exit(exitStatus)
 	}

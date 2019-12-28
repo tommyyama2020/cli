@@ -12,7 +12,6 @@ import (
 	"code.cloudfoundry.org/cli/command/common"
 	"code.cloudfoundry.org/cli/command/flag"
 	"code.cloudfoundry.org/cli/command/translatableerror"
-	plugin_transition "code.cloudfoundry.org/cli/plugin/transition"
 	"code.cloudfoundry.org/cli/util/configv3"
 	"code.cloudfoundry.org/cli/util/ui"
 	"github.com/jessevdk/go-flags"
@@ -36,12 +35,13 @@ type TriggerLegacyMain interface {
 	error
 }
 
+// TODO Unwind this code, remove specific edge case just for v2v3 app command
 const switchToV2 = -3
 
 var ErrFailed = errors.New("command failed")
 var ParseErr = errors.New("incorrect type for arg")
 
-func CommandParser(args []string) int {
+func ParseCommandFromArgs(args []string) int {
 	exitStatus := parse(os.Args[1:], &common.Commands)
 	if exitStatus == switchToV2 {
 		exitStatus = parse(os.Args[1:], &common.FallbackCommands)
@@ -130,20 +130,8 @@ func handleFlagErrorAndCommandHelp(flagErr *flags.Error, parser *flags.Parser, e
 		return 1
 	case flags.ErrUnknownCommand:
 		if !isHelpCommand(originalArgs) {
-			config, configErr := configv3.LoadConfig()
-			if configErr != nil {
-				if _, ok := configErr.(translatableerror.EmptyConfigError); !ok {
-					fmt.Fprintf(os.Stderr, "Empty Config, failed to load plugins")
-					return 1
-				}
-			}
-
-			if plugin, ok := isPluginCommand(originalArgs[0], config.Plugins()); ok {
-				runPlugin(plugin)
-			} else {
 				// TODO Extract handling of unknown commands/suggested  commands out of legacy
 				cmd.Main(os.Getenv("CF_TRACE"), os.Args)
-			}
 		} else {
 			helpExitCode := parse([]string{"help", originalArgs[0]}, commandList)
 			return helpExitCode
@@ -160,21 +148,6 @@ func handleFlagErrorAndCommandHelp(flagErr *flags.Error, parser *flags.Parser, e
 	return 0
 }
 
-func runPlugin(plugin configv3.Plugin) int {
-	_, commandUI, err := getCFConfigAndCommandUIObjects()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
-		return 1
-	}
-	defer commandUI.FlushDeferred()
-	pluginErr := plugin_transition.RunPlugin(plugin, commandUI)
-	if pluginErr != nil {
-		handleError(pluginErr, commandUI) //nolint: errcheck
-		return 1
-	}
-	return 0
-}
-
 func getCFConfigAndCommandUIObjects() (*configv3.Config, *ui.UI, error) {
 	cfConfig, configErr := configv3.LoadConfig(configv3.FlagOverride{
 		Verbose: common.Commands.VerboseOrVersion,
@@ -186,18 +159,6 @@ func getCFConfigAndCommandUIObjects() (*configv3.Config, *ui.UI, error) {
 	}
 	commandUI, err := ui.NewUI(cfConfig)
 	return cfConfig, commandUI, err
-}
-
-func isPluginCommand(command string, plugins []configv3.Plugin) (configv3.Plugin, bool) {
-	for _, plugin := range plugins {
-		for _, pluginCommand := range plugin.Commands {
-			if command == pluginCommand.Name || command == pluginCommand.Alias {
-				return plugin, true
-			}
-		}
-	}
-
-	return configv3.Plugin{}, false
 }
 
 func isHelpCommand(args []string) bool {
